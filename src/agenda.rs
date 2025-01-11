@@ -1,5 +1,5 @@
+use adw::prelude::*;
 use chrono::Datelike as _;
-use gtk::prelude::*;
 
 #[derive(Debug)]
 pub enum MsgInput {

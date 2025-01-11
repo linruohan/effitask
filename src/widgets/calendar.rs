@@ -1,5 +1,5 @@
 use chrono::Datelike as _;
-use gtk::prelude::*;
+use adw::prelude::*;
 
 pub struct Model {
     date: Option<chrono::NaiveDate>,

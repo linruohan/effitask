@@ -39,7 +39,7 @@ fn usage(program: &str) {
 }
 
 fn initialize_resources() {
-    gtk::gio::resources_register_include!("resources").unwrap();
+    gtk::gio::resources_register_include!("gresource").unwrap();
 
     let display = gtk::gdk::Display::default().unwrap();
     let theme = gtk::IconTheme::for_display(&display);

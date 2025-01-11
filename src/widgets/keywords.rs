@@ -1,6 +1,6 @@
 #![allow(deprecated)]
 
-use gtk::prelude::*;
+use adw::prelude::*;
 
 #[derive(Debug)]
 pub enum MsgInput {

@@ -2,14 +2,15 @@
 name = "effitask"
 version = "0.1.0"
 authors = ["Sanpi <sanpi@homecomputing.fr>"]
-homepage = "https://github.com/todotxt-rs/effitask"
-edition = "2021"
-rust-version = "1.80"
+homepage = "https://github.com/linruohan/effitask"
+edition = "2024"
 
 [dependencies]
+adw = { version = "0.7", package = "libadwaita", features = ["v1_5"] }
+anyhow = "1.0.95"
 envir = "1.0"
 human-panic = "2.0"
-notify = "7.0"
+notify = "8.0.0"
 pulldown-cmark = "0.12"
 rand = "0.8"
 regex = "1.0"
@@ -23,10 +24,10 @@ default-features = false
 [dependencies.gtk]
 package = "gtk4"
 version = "0.9"
-features = ["v4_12"]
+features = ["v4_16"]
 
 [dependencies.log]
-version = "0.4"
+version = "0.4.24"
 features = ["std"]
 
 [dependencies.todo-txt]
@@ -35,3 +36,27 @@ features = ["config", "extended"]
 
 [build-dependencies]
 glib-build-tools = "0.20"
+anyhow = "1.0.94"
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
+winresource = "0.1.17"
+
+[patch.crates-io]
+
+[profile.dev]
+debug = true
+opt-level = 2
+debug-assertions = true
+overflow-checks = true
+lto = false
+panic = 'unwind'
+incremental = true
+codegen-units = 16
+rpath = false
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = 3
+# We want to be able to debug in the release build as well
+debug = true

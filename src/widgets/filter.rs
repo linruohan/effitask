@@ -1,6 +1,6 @@
 #![allow(deprecated)]
 
-use gtk::prelude::*;
+use adw::prelude::*;
 use relm4::ComponentController as _;
 
 #[repr(u32)]

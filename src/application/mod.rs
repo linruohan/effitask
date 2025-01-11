@@ -7,7 +7,7 @@ pub use globals::tasks::get as tasks;
 use globals::tasks::add as add_task;
 use preferences::Preferences;
 
-use gtk::prelude::*;
+use adw::prelude::*;
 use relm4::ComponentController as _;
 
 pub const NAME: &str = env!("CARGO_PKG_NAME");
@@ -286,7 +286,7 @@ impl Model {
         }
     }
 
-    fn shortcuts(window: &gtk::ApplicationWindow, sender: relm4::ComponentSender<Self>) {
+    fn shortcuts(window: &adw::ApplicationWindow, sender: relm4::ComponentSender<Self>) {
         static SHORTCUTS: &[(&str, Msg)] = &[
             ("<Control>A", Msg::Adding),
             ("<Control>F", Msg::Find),
@@ -454,11 +454,13 @@ impl relm4::Component for Model {
     }
 
     view! {
-        gtk::ApplicationWindow {
+        adw::ApplicationWindow {
             set_title: NAME.into(),
-            gtk::Box {
+            set_decorated: false,
+            #[wrap(Some)]
+            set_content = &gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
-                gtk::HeaderBar {
+                adw::HeaderBar {
                     set_title_widget: Some(&gtk::Label::new(NAME.into())),
 
                     pack_start = &gtk::Button {

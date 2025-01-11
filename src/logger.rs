@@ -1,4 +1,4 @@
-use gtk::prelude::*;
+use adw::prelude::*;
 
 type ChannelData = (log::Level, String);
 type Sender = std::sync::mpsc::Sender<ChannelData>;
