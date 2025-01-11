@@ -477,16 +477,17 @@ impl relm4::Component for Model {
                         set_popover = &gtk::Popover {
                             gtk::Box {
                                 set_orientation: gtk::Orientation::Vertical,
-
+                                gtk::Label {
+                                    set_text: "Create a new task +project @context due:2050-01-01",
+                                },
                                 gtk::Entry {
                                     connect_activate[sender] => move |this| {
                                         sender.input(Msg::Add(this.text().to_string()));
+                                        println!("Current text: {}", this.text());
                                         this.set_text("");
                                     }
                                 },
-                                gtk::Label {
-                                    set_text: "Create a new task +project @context due:2042-01-01",
-                                },
+
                             },
                         },
                     },

@@ -1,5 +1,7 @@
 #![warn(warnings)]
 
+use adw::prelude::*;
+use relm4::gtk;
 mod agenda;
 mod application;
 mod date;
@@ -24,6 +26,10 @@ fn main() {
     }
 
     let config = todo_txt::Config::from_env();
+    // 设置主题
+    gtk::init().expect("Failed to initialize GTK.");
+    let settings = gtk::Settings::default().expect("Failed to get default settings.");
+    settings.set_property("gtk-theme-name", &"Adwaita:dark");
 
     let app = relm4::RelmApp::new("txt.todo.effitask").with_args(Vec::new());
     initialize_resources();
