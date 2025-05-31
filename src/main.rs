@@ -1,18 +1,19 @@
 #![warn(warnings)]
-
 use adw::prelude::*;
-use relm4::gtk;
 mod agenda;
 mod application;
 mod date;
 mod done;
 mod edit;
+mod filter;
 mod flag;
 mod inbox;
 mod logger;
 mod search;
 mod tasks;
 mod widgets;
+
+use filter::Filter;
 
 fn main() {
     human_panic::setup_panic!();
@@ -33,7 +34,6 @@ fn main() {
 
     let app = relm4::RelmApp::new("txt.todo.effitask").with_args(Vec::new());
     initialize_resources();
-
     app.run::<application::Model>(config);
 }
 

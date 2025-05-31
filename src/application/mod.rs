@@ -4,11 +4,11 @@ mod preferences;
 pub use globals::preferences::get as preferences;
 pub use globals::tasks::get as tasks;
 
-use globals::tasks::add as add_task;
 use preferences::Preferences;
 
 use adw::prelude::*;
 use relm4::ComponentController as _;
+use relm4::prelude::*;
 
 pub const NAME: &str = env!("CARGO_PKG_NAME");
 
@@ -18,11 +18,11 @@ enum Page {
     Inbox = 0,
     Projects,
     Contexts,
+    Tags,
     Agenda,
     Flag,
     Done,
     Search,
-    Tags,
 }
 
 impl From<u32> for Page {
@@ -51,6 +51,8 @@ impl From<Page> for u32 {
 pub enum Msg {
     Adding,
     Add(String),
+    AskRefresh,
+    Cancel,
     Complete(Box<crate::tasks::Task>),
     Edit(Box<crate::tasks::Task>),
     EditCancel,
@@ -71,9 +73,10 @@ pub struct Model {
     inbox: relm4::Controller<crate::inbox::Model>,
     logger: relm4::Controller<crate::logger::Model>,
     projects: relm4::Controller<crate::widgets::tags::Model>,
-    shortcuts: gtk::ShortcutsWindow,
     search: relm4::Controller<crate::search::Model>,
+    shortcuts: gtk::ShortcutsWindow,
     tags: relm4::Controller<crate::widgets::tags::Model>,
+    watcher: notify::RecommendedWatcher,
 }
 
 impl Model {
@@ -141,10 +144,12 @@ impl Model {
     }
 
     fn add(&mut self, widgets: &ModelWidgets, text: &str) {
-        match add_task(text) {
+        self.unwatch();
+        match globals::tasks::add(text) {
             Ok(_) => self.update_tasks(widgets),
             Err(err) => log::error!("Unable to create task: '{err}'"),
         }
+        self.watch();
 
         widgets.add_popover.popdown();
     }
@@ -186,7 +191,7 @@ impl Model {
             }
         }
 
-        match list.write() {
+        match self.write_tasks(&list) {
             Ok(_) => {
                 if list.tasks[id].finished {
                     log::info!("Task done");
@@ -214,7 +219,7 @@ impl Model {
             list.tasks[id] = task.clone();
         }
 
-        match list.write() {
+        match self.write_tasks(&list) {
             Ok(_) => (),
             Err(err) => log::error!("Unable to save tasks: {err}"),
         };
@@ -245,9 +250,10 @@ impl Model {
         globals::preferences::replace(crate::application::Preferences {
             defered: widgets.defered_button.is_active(),
             done: widgets.done_button.is_active(),
+            hidden: widgets.hidden_button.is_active(),
         });
 
-        self.agenda.sender().emit(crate::agenda::MsgInput::Update);
+        self.agenda.sender().emit(crate::agenda::Msg::Update);
         self.contexts
             .sender()
             .emit(crate::widgets::tags::MsgInput::Update);
@@ -261,32 +267,30 @@ impl Model {
         self.tags
             .sender()
             .emit(crate::widgets::tags::MsgInput::Update);
-
-        log::info!("Tasks reloaded");
     }
 
-    fn watch(&self, sender: relm4::ComponentSender<Self>) {
+    fn watch(&mut self) {
         use notify::Watcher as _;
-
-        let mut watcher = notify::recommended_watcher(move |res| match res {
-            Ok(_) => {
-                sender.input(Msg::Refresh);
-            }
-            Err(e) => log::warn!("watch error: {e:?}"),
-        })
-        .unwrap();
 
         log::debug!("watching {} for changes", self.config.todo_file);
 
-        if let Err(err) = watcher.watch(
-            std::path::PathBuf::from(self.config.todo_file.clone()).as_path(),
-            notify::RecursiveMode::Recursive,
+        if let Err(err) = self.watcher.watch(
+            std::path::PathBuf::from(&self.config.todo_file).as_path(),
+            notify::RecursiveMode::NonRecursive,
         ) {
             log::warn!("Unable to setup hot reload: {err}");
         }
     }
 
-    fn shortcuts(window: &adw::ApplicationWindow, sender: relm4::ComponentSender<Self>) {
+    fn unwatch(&mut self) {
+        use notify::Watcher as _;
+
+        self.watcher
+            .unwatch(std::path::PathBuf::from(&self.config.todo_file).as_path())
+            .ok();
+    }
+
+    fn shortcuts(window: &gtk::ApplicationWindow, sender: relm4::ComponentSender<Self>) {
         static SHORTCUTS: &[(&str, Msg)] = &[
             ("<Control>A", Msg::Adding),
             ("<Control>F", Msg::Find),
@@ -317,6 +321,22 @@ impl Model {
 
         window.add_controller(controller);
     }
+
+    fn write_tasks(&mut self, list: &crate::tasks::List) -> Result<(), String> {
+        self.unwatch();
+        let result = list.write();
+        self.watch();
+
+        result
+    }
+
+    fn check_button_set_markup(check_button: &gtk::CheckButton) {
+        if let Some(child) = check_button.child() {
+            if let Ok(label) = child.downcast::<gtk::Label>() {
+                label.set_use_markup(true);
+            }
+        }
+    }
 }
 
 #[relm4::component(pub)]
@@ -336,8 +356,8 @@ impl relm4::Component for Model {
         let agenda = crate::agenda::Model::builder()
             .launch(crate::date::today())
             .forward(sender.input_sender(), |output| match output {
-                crate::agenda::MsgOutput::Complete(task) => Msg::Complete(task),
-                crate::agenda::MsgOutput::Edit(task) => Msg::Edit(task),
+                crate::widgets::task::MsgOutput::Complete(task) => Msg::Complete(task),
+                crate::widgets::task::MsgOutput::Edit(task) => Msg::Edit(task),
             });
 
         let contexts = crate::widgets::tags::Model::builder()
@@ -385,12 +405,13 @@ impl relm4::Component for Model {
                 crate::widgets::tags::MsgOutput::Edit(task) => Msg::Edit(task),
             });
 
-        let search = crate::search::Model::builder()
-            .launch(String::new())
-            .forward(sender.input_sender(), |output| match output {
-                crate::widgets::task::MsgOutput::Complete(task) => Msg::Complete(task),
-                crate::widgets::task::MsgOutput::Edit(task) => Msg::Edit(task),
-            });
+        let search =
+            crate::search::Model::builder()
+                .launch(())
+                .forward(sender.input_sender(), |output| match output {
+                    crate::widgets::task::MsgOutput::Complete(task) => Msg::Complete(task),
+                    crate::widgets::task::MsgOutput::Edit(task) => Msg::Edit(task),
+                });
 
         let tags = crate::widgets::tags::Model::builder()
             .launch(crate::widgets::tags::Type::Hashtags)
@@ -402,7 +423,22 @@ impl relm4::Component for Model {
         let builder = gtk::Builder::from_resource("/txt/todo/effitask/shortcuts.ui");
         let shortcuts = builder.object("shortcuts").unwrap();
 
-        let model = Self {
+        let watcher = {
+            let sender = sender.clone();
+
+            notify::recommended_watcher(move |res: notify::Result<notify::Event>| match res {
+                Ok(event) => {
+                    if matches!(event.kind, notify::EventKind::Modify(_)) {
+                        sender.input(Msg::AskRefresh);
+                    }
+                }
+                Err(e) => log::warn!("watch error: {e:?}"),
+            })
+            .unwrap()
+        };
+
+        let mut model = Self {
+            watcher,
             agenda,
             config: init,
             contexts,
@@ -417,13 +453,18 @@ impl relm4::Component for Model {
             tags,
         };
 
+        model.watch();
+
         let widgets = view_output!();
 
         model.load_style();
         model.add_tab_widgets(&widgets.notebook);
         model.update_tasks(&widgets);
         model.search.widget().set_visible(false);
-        model.watch(sender.clone());
+
+        Self::check_button_set_markup(&widgets.defered_button);
+        Self::check_button_set_markup(&widgets.done_button);
+        Self::check_button_set_markup(&widgets.hidden_button);
 
         Self::shortcuts(&root, sender);
 
@@ -440,6 +481,8 @@ impl relm4::Component for Model {
         match msg {
             Msg::Add(task) => self.add(widgets, &task),
             Msg::Adding => widgets.add_popover.popup(),
+            Msg::AskRefresh => widgets.ask.set_visible(true),
+            Msg::Cancel => widgets.ask.set_visible(false),
             Msg::Complete(task) => self.complete(widgets, &task),
             Msg::EditCancel => self.edit.widget().set_visible(false),
             Msg::EditDone(task) => self.save(widgets, &task),
@@ -448,17 +491,20 @@ impl relm4::Component for Model {
                 widgets.search.grab_focus();
             }
             Msg::Help => self.shortcuts.present(),
-            Msg::Refresh => self.update_tasks(widgets),
+            Msg::Refresh => {
+                self.update_tasks(widgets);
+                widgets.ask.set_visible(false);
+                log::info!("Tasks reloaded");
+            }
             Msg::Search(query) => self.search(widgets, &query),
         }
     }
 
     view! {
-        adw::ApplicationWindow {
-            set_title: NAME.into(),
+        gtk::ApplicationWindow {
             set_decorated: false,
-            #[wrap(Some)]
-            set_content = &gtk::Box {
+            set_title: NAME.into(),
+            gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 adw::HeaderBar {
                     set_title_widget: Some(&gtk::Label::new(NAME.into())),
@@ -477,17 +523,16 @@ impl relm4::Component for Model {
                         set_popover = &gtk::Popover {
                             gtk::Box {
                                 set_orientation: gtk::Orientation::Vertical,
-                                gtk::Label {
-                                    set_text: "Create a new task +project @context due:2050-01-01",
-                                },
+
                                 gtk::Entry {
                                     connect_activate[sender] => move |this| {
                                         sender.input(Msg::Add(this.text().to_string()));
-                                        println!("Current text: {}", this.text());
                                         this.set_text("");
                                     }
                                 },
-
+                                gtk::Label {
+                                    set_text: "Create a new task +project @context due:2042-01-01",
+                                },
                             },
                         },
                     },
@@ -500,13 +545,29 @@ impl relm4::Component for Model {
                                 set_orientation: gtk::Orientation::Vertical,
                                 #[name = "defered_button"]
                                 gtk::CheckButton {
-                                    set_label: Some("Display defered tasks"),
+                                    #[wrap(Some)]
+                                    set_child = &gtk::Label::new(
+                                        Some("Display <b>defered</b> tasks"),
+                                    ),
 
                                     connect_toggled => Msg::Refresh,
                                 },
                                 #[name = "done_button"]
                                 gtk::CheckButton {
-                                    set_label: Some("Display done tasks"),
+                                    #[wrap(Some)]
+                                    set_child = &gtk::Label::new(
+                                        Some("Display <b>done</b> tasks"),
+                                    ),
+
+                                    connect_toggled => Msg::Refresh,
+                                },
+                                #[name = "hidden_button"]
+                                gtk::CheckButton {
+                                    #[wrap(Some)]
+                                    set_child = &gtk::Label::new(
+                                        Some("Display <b>hidden</b> tasks"),
+                                    ),
+
                                     connect_toggled => Msg::Refresh,
                                 },
                             },
@@ -525,6 +586,26 @@ impl relm4::Component for Model {
                         connect_search_changed[sender] => move |this| {
                             sender.input(Msg::Search(this.text().to_string()));
                         },
+                    },
+                },
+                #[name = "ask"]
+                gtk::Box {
+                    add_css_class: "ask",
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_visible: false,
+
+                    gtk::Label {
+                        set_hexpand: true,
+                        set_text: "Tasks have been modified from an external program, would you like to reload them?",
+                    },
+                    gtk::Button {
+                        add_css_class: "suggested-action",
+                        set_label: "Yes",
+                        connect_clicked => Msg::Refresh,
+                    },
+                    gtk::Button {
+                        set_label: "No",
+                        connect_clicked => Msg::Cancel,
                     },
                 },
                 gtk::Paned {

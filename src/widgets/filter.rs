@@ -1,5 +1,3 @@
-#![allow(deprecated)]
-
 use adw::prelude::*;
 use relm4::ComponentController as _;
 
@@ -106,7 +104,7 @@ impl Model {
     }
 
     fn update_tasks(&self, tasks: Vec<crate::tasks::Task>) {
-        self.tasks.emit(super::tasks::Msg::Update(tasks));
+        self.tasks.emit(super::tasks::MsgInput::Update(tasks));
     }
 
     fn select_range(treeview: &gtk::TreeView, path: &gtk::TreePath) {
@@ -140,13 +138,12 @@ impl relm4::Component for Model {
         root: Self::Root,
         sender: relm4::ComponentSender<Self>,
     ) -> relm4::ComponentParts<Self> {
-        let tasks = crate::widgets::tasks::Model::builder().launch(()).forward(
-            sender.output_sender(),
-            |output| match output {
+        let tasks = crate::widgets::tasks::Model::builder()
+            .launch(().into())
+            .forward(sender.output_sender(), |output| match output {
                 super::task::MsgOutput::Complete(task) => MsgOutput::Complete(task),
                 super::task::MsgOutput::Edit(task) => MsgOutput::Edit(task),
-            },
-        );
+            });
 
         let columns = vec![
             gtk::glib::types::Type::STRING,

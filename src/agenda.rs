@@ -2,7 +2,7 @@ use adw::prelude::*;
 use chrono::Datelike as _;
 
 #[derive(Debug)]
-pub enum MsgInput {
+pub enum Msg {
     CalendarChange(Change),
     DateSelect(chrono::NaiveDate),
     Update,
@@ -16,21 +16,11 @@ pub enum Change {
     NextYear,
 }
 
-#[derive(Debug)]
-pub enum MsgOutput {
-    Complete(Box<crate::tasks::Task>),
-    Edit(Box<crate::tasks::Task>),
-}
-
 macro_rules! create {
     ($sender:ident) => {{
-        let component = crate::widgets::tasks::Model::builder().launch(()).forward(
-            $sender.output_sender(),
-            |output| match output {
-                crate::widgets::task::MsgOutput::Complete(task) => MsgOutput::Complete(task),
-                crate::widgets::task::MsgOutput::Edit(task) => MsgOutput::Edit(task),
-            },
-        );
+        let component = crate::widgets::tasks::Model::builder()
+            .launch(().into())
+            .forward($sender.output_sender(), std::convert::identity);
         component
             .widget()
             .set_vscrollbar_policy(gtk::PolicyType::Never);
@@ -47,7 +37,9 @@ macro_rules! update {
 
         $exp.set_expanded(!tasks.is_empty());
         $exp.set_sensitive(!tasks.is_empty());
-        $self.$task.emit(crate::widgets::tasks::Msg::Update(tasks));
+        $self
+            .$task
+            .emit(crate::widgets::tasks::MsgInput::Update(tasks));
     }};
 }
 
@@ -145,6 +137,7 @@ impl Model {
             .filter(|x| {
                 if let Some(due_date) = x.due_date {
                     (preferences.done || !x.finished)
+                        && (preferences.hidden || !x.hidden)
                         && (preferences.defered
                             || x.threshold_date.is_none()
                             || start.is_none()
@@ -187,8 +180,8 @@ impl Model {
 impl relm4::Component for Model {
     type CommandOutput = ();
     type Init = chrono::NaiveDate;
-    type Input = MsgInput;
-    type Output = MsgOutput;
+    type Input = Msg;
+    type Output = crate::widgets::task::MsgOutput;
 
     fn init(
         init: Self::Init,
@@ -207,6 +200,7 @@ impl relm4::Component for Model {
         };
 
         let widgets = view_output!();
+        sender.input(Msg::DateSelect(init));
 
         relm4::ComponentParts { model, widgets }
     }
@@ -218,7 +212,7 @@ impl relm4::Component for Model {
         _: relm4::ComponentSender<Self>,
         _: &Self::Root,
     ) {
-        use MsgInput::*;
+        use Msg::*;
 
         match msg {
             CalendarChange(change) => {
@@ -232,7 +226,12 @@ impl relm4::Component for Model {
 
                 self.update_marks(widgets);
             }
-            DateSelect(date) => self.date = date,
+            DateSelect(date) => {
+                widgets.calendar.set_day(date.day() as i32);
+                widgets.calendar.set_month(date.month0() as i32);
+                widgets.calendar.set_year(date.year());
+                self.date = date;
+            }
             Update => (),
         }
 
@@ -243,6 +242,9 @@ impl relm4::Component for Model {
         gtk::Box {
             set_orientation: gtk::Orientation::Horizontal,
             set_spacing: 10,
+            set_margin_end: 10,
+            set_margin_start: 10,
+            set_margin_top: 10,
 
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
@@ -250,56 +252,53 @@ impl relm4::Component for Model {
 
                 #[name = "calendar"]
                 gtk::Calendar {
-                    #[watch]
-                    set_day: model.date.day() as i32,
-                    #[watch]
-                    set_month: model.date.month() as i32 - 1,
-                    #[watch]
-                    set_year: model.date.year(),
-
                     connect_day_selected[sender] => move |this| {
-                        sender.input(MsgInput::DateSelect(crate::date::from_glib(this.date())));
+                        sender.input(Msg::DateSelect(crate::date::from_glib(this.date())));
                     },
-                    connect_next_month => MsgInput::CalendarChange(Change::NextMonth),
-                    connect_next_year => MsgInput::CalendarChange(Change::NextYear),
-                    connect_prev_month => MsgInput::CalendarChange(Change::PrevMonth),
-                    connect_prev_year => MsgInput::CalendarChange(Change::PrevYear),
+                    connect_next_month => Msg::CalendarChange(Change::NextMonth),
+                    connect_next_year => Msg::CalendarChange(Change::NextYear),
+                    connect_prev_month => Msg::CalendarChange(Change::PrevMonth),
+                    connect_prev_year => Msg::CalendarChange(Change::PrevYear),
                 },
                 gtk::Button {
                     set_label: "Today",
-                    connect_clicked => MsgInput::DateSelect(crate::date::today()),
+                    connect_clicked => Msg::DateSelect(crate::date::today()),
                 },
             },
             gtk::ScrolledWindow {
                 gtk::Box {
                     set_hexpand: true,
                     set_orientation: gtk::Orientation::Vertical,
-                    set_vexpand: true,
 
                     #[name = "past_exp"]
                     gtk::Expander {
                         set_child: Some(model.past.widget()),
                         set_label: Some("Past due"),
+                        set_vexpand: false,
                     },
                     #[name = "today_exp"]
                     gtk::Expander {
                         set_child: Some(model.today.widget()),
                         set_label: Some("Today"),
+                        set_vexpand: false,
                     },
                     #[name = "tomorrow_exp"]
                     gtk::Expander {
                         set_child: Some(model.tomorrow.widget()),
                         set_label: Some("Tomorrow"),
+                        set_vexpand: false,
                     },
                     #[name = "week_exp"]
                     gtk::Expander {
                         set_child: Some(model.week.widget()),
                         set_label: Some("This week"),
+                        set_vexpand: false,
                     },
                     #[name = "month_exp"]
                     gtk::Expander {
                         set_child: Some(model.month.widget()),
                         set_label: Some("This month"),
+                        set_vexpand: false,
                     },
                 },
             },
