@@ -11,7 +11,8 @@ human-panic = "2.0"
 notify = "8.0"
 pulldown-cmark = "0.13"
 regex = "1.0"
-relm4 = { git = "https://github.com/Relm4/Relm4.git", rev = "e24915ac03e5ef1ec6f489ac7aeb26ec009f1618" }
+relm4 = { version = "0.9.1", features = ["libadwaita", "gnome_47"] }
+relm4-components = "0.9.1"
 
 [dependencies.async-std]
 version = "1.13.1"
@@ -28,8 +29,8 @@ features = ["dotenv"]
 
 [dependencies.gtk]
 package = "gtk4"
-version = "0.9"
-features = ["v4_16"]
+version = "0.9.6"
+features = ["v4_18"]
 
 [dependencies.log]
 version = "0.4.24"

@@ -525,10 +525,13 @@ impl relm4::Component for Model {
                                 set_orientation: gtk::Orientation::Vertical,
 
                                 gtk::Entry {
+                                    set_input_purpose: gtk::InputPurpose::FreeForm,
+                                    set_input_hints: gtk::InputHints::SPELLCHECK,
+
                                     connect_activate[sender] => move |this| {
                                         sender.input(Msg::Add(this.text().to_string()));
                                         this.set_text("");
-                                    }
+                                    },
                                 },
                                 gtk::Label {
                                     set_text: "Create a new task +project @context due:2042-01-01",

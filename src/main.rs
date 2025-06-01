@@ -17,6 +17,19 @@ use filter::Filter;
 
 fn main() {
     human_panic::setup_panic!();
+    // 输入法模块设置
+    unsafe {
+        // Windows 需要特别设置
+        #[cfg(target_os = "windows")]
+        {
+            std::env::set_var("GTK_IM_MODULE", "xim");
+            std::env::set_var("IMSETTINGS_MODULE", "none");
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            std::env::set_var("GTK_IM_MODULE", "ibus");
+        }
+    };
 
     envir::init();
 

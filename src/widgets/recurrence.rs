@@ -137,13 +137,16 @@ impl relm4::SimpleComponent for Model {
 
                     connect_toggled => MsgInput::Update,
                 },
-                gtk::CheckButton::with_binding(&model.strict) {
+                gtk::CheckButton {
                     set_halign: gtk::Align::Center,
                     set_hexpand: true,
                     set_label: Some("Strict"),
                     set_tooltip_text: Some("Use real due date as offset, not today"),
-
-                    connect_toggled => MsgInput::Update,
+                    set_active: model.strict.value(),
+                    connect_toggled[sender, strict_binding = model.strict.clone()] => move |btn| {
+                        strict_binding.set_value(btn.is_active());
+                        sender.input(MsgInput::Update);
+                    },
                 },
             },
         }
